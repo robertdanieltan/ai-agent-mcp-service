@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: mcp_postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-task_management}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./database/sample_data.sql:/docker-entrypoint-initdb.d/02-sample_data.sql
+    networks:
+      - mcp_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MCP Service
+  mcp-service:
+    build:
+      context: .
+      dockerfile: mcp_service/Dockerfile
+    container_name: mcp_service
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-task_management}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mcp_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # MCP STDIO Wrapper for CrewAI integration
+  mcp-stdio-wrapper:
+    build:
+      context: .
+      dockerfile: mcp_stdio_wrapper/Dockerfile
+    container_name: mcp_stdio_wrapper
+    environment:
+      MCP_SERVICE_URL: http://mcp-service:8000
+    depends_on:
+      mcp-service:
+        condition: service_healthy
+    networks:
+      - mcp_network
+    restart: unless-stopped
+    # This service runs as a utility container, not exposed directly
+
+  # CrewAI Agent Service
+  crewai-agent:
+    build:
+      context: .
+      dockerfile: crewai_agent/Dockerfile
+    container_name: crewai_agent
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      MCP_SERVICE_URL: http://mcp-service:8000
+      PORT: 8001
+      HOST: 0.0.0.0
+    ports:
+      - "8001:8001"
+    depends_on:
+      mcp-service:
+        condition: service_healthy
+    networks:
+      - mcp_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # pgAdmin4 for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: mcp_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mcp_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  mcp_network:
+    driver: bridge
