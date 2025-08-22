@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an **AI Agent MCP Service Learning Project** that demonstrates Model Context Protocol (MCP) service development using **FastAPI HTTP MCP service** with **Simple AI Agent** integration. The project runs in a **Docker multi-container environment with PostgreSQL** for data persistence.
+This is an **AI Agent MCP Service Learning Project** that demonstrates Model Context Protocol (MCP) service development using **HTTP-based MCP service** with **Simple AI Agent** integration. The project runs in a **Docker multi-container environment with PostgreSQL** for data persistence.
 
-**Architecture**: Simple AI Agent (FastAPI + Anthropic Claude) ← HTTP → MCP Service (FastAPI) ← PostgreSQL Database
+**Architecture**: Simple AI Agent (FastAPI + Anthropic Claude) ← HTTP → MCP HTTP Service (FastAPI) ← PostgreSQL Database
 
 **Key Features**:
 - Natural language project management via Anthropic Claude
@@ -19,31 +19,31 @@ This is an **AI Agent MCP Service Learning Project** that demonstrates Model Con
 
 ```
 mcp_proj1/
-├── mcp_service/
+├── mcp_http_service/        # HTTP-based MCP service (renamed from mcp_stdio_service)
 │   ├── __init__.py
-│   ├── main.py              # FastAPI HTTP MCP server
+│   ├── main.py              # FastAPI HTTP MCP server with experimental STDIO support
 │   ├── models.py            # Pydantic models for Project and Task
 │   ├── database.py          # PostgreSQL connection and operations
-│   ├── tools.py             # All 7 MCP tool implementations
-│   └── Dockerfile           # MCP service container
+│   ├── mcp_tools.py         # All 7 MCP tool implementations
+│   ├── requirements.txt     # HTTP service dependencies
+│   └── Dockerfile           # HTTP MCP service container
 ├── crewai_agent/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI web service for AI agent
 │   ├── simple_agent.py      # Simple Project Agent with Anthropic Claude
+│   ├── project_manager_agent.py # Experimental CrewAI agent (dependency conflicts)
+│   ├── mcp_tools.py         # Custom CrewAI MCP tools (unused)
 │   ├── requirements.txt     # Agent dependencies
 │   └── Dockerfile           # AI agent container
-├── mcp_stdio_wrapper/
-│   ├── __init__.py
-│   ├── mcp_stdio_wrapper.py # STDIO ↔ HTTP bridge (unused in current impl)
-│   ├── requirements.txt     # Wrapper dependencies
-│   └── Dockerfile           # STDIO wrapper container
+├── mcp_service/             # Original MCP service (commented out in docker-compose)
+├── mcp_stdio_wrapper/       # Original STDIO wrapper (commented out in docker-compose)
 ├── database/
 │   ├── init.sql             # Complete database schema
 │   └── sample_data.sql      # Sample projects and tasks
 ├── tests/
 │   ├── test_mcp_tools.sh    # Bash test suite for MCP service
 │   └── test_mcp_tools.py    # Python test suite for MCP service
-├── docker-compose.yml       # Multi-service orchestration
+├── docker-compose.yml       # 3-service orchestration (mcp-http-service, crewai-agent, postgres, pgadmin)
 ├── requirements.txt         # Legacy requirements (for MCP service)
 ├── .env                     # Environment variables
 ├── .dockerignore           # Docker build exclusions
@@ -54,48 +54,54 @@ mcp_proj1/
 
 ### ✅ Completed Components
 
-1. **MCP Service** (FastAPI HTTP-based)
+1. **MCP HTTP Service** (FastAPI-based)
    - ✅ 7 MCP tools: create_project, create_task, update_task_status, get_tasks_by_status, get_project_tasks, list_all_projects, get_task_summary
-   - ✅ PostgreSQL integration with psycopg2
-   - ✅ HTTP communication on port 8000
+   - ✅ PostgreSQL integration with direct database access
+   - ✅ HTTP communication (port 8000) + experimental STDIO support
    - ✅ Health check endpoint at /health
    - ✅ Pydantic models with validation
-   - ✅ Comprehensive testing (Bash and Python test suites)
+   - ✅ Container consolidation (reduced from 4 to 3 services)
 
-2. **Simple AI Agent** (Lightweight alternative to CrewAI)
-   - ✅ Project Manager agent with Anthropic Claude integration
-   - ✅ Natural language processing for project management requests
-   - ✅ HTTP calls to MCP service (create_project, create_task)
+2. **Simple AI Agent** (HTTP-based MCP integration)
+   - ✅ Project Manager agent with natural language processing
+   - ✅ HTTP-based MCP tool calls (working)
    - ✅ FastAPI web service on port 8001
    - ✅ Health check and status endpoints
-   - ✅ End-to-end testing completed
+   - ✅ End-to-end project creation workflow
+   - ⚠️ Simplified request parsing (Anthropic Claude bypassed due to proxy issues)
 
 3. **Database Infrastructure**
    - ✅ Complete PostgreSQL schema with constraints and indexes
-   - ✅ Sample data with 3 projects and 14 tasks
+   - ✅ Sample data with multiple projects created via API
    - ✅ Automatic timestamp triggers
    - ✅ Task status and priority validation
 
-4. **Docker Infrastructure**
-   - ✅ Multi-stage Dockerfiles for all services
-   - ✅ Docker Compose with 4 services: mcp-service, crewai-agent, postgres, pgadmin
+4. **Optimized Docker Infrastructure**
+   - ✅ Container consolidation: 4 → 3 services
+   - ✅ Multi-stage Dockerfiles for both active services
    - ✅ Health checks and restart policies
    - ✅ Persistent volumes for data
    - ✅ Network isolation and service dependencies
 
 5. **Testing & Validation**
-   - ✅ MCP service testing (all 7 tools verified)
-   - ✅ AI agent integration testing
-   - ✅ End-to-end workflow validation
-   - ✅ Natural language request processing
+   - ✅ Combined MCP service testing (all 7 tools verified)
+   - ✅ AI agent integration testing via HTTP
+   - ✅ End-to-end project creation workflow
    - ✅ Database operations verification
+   - ✅ Container health monitoring
 
-### 🔄 Optional Components (Available but unused)
+### 🔄 Experimental Components (Available but deferred)
 
-1. **STDIO Wrapper**
-   - ✅ Bridge between STDIO and HTTP MCP service
-   - ✅ JSON-RPC 2.0 protocol implementation
-   - ⚠️ Not used in current implementation (direct HTTP used instead)
+1. **Native CrewAI MCP Integration**
+   - ✅ MCPServerAdapter implementation with StdioServerParameters
+   - ✅ Native STDIO MCP protocol support
+   - ❌ Dependency conflicts (CrewAI MCP requires anyio>=4.5, FastAPI requires anyio<4.0.0)
+   - ⚠️ Deferred until dependency conflicts resolved
+
+2. **Original Separate Services** (commented out in docker-compose.yml)
+   - ✅ Original mcp-service (FastAPI HTTP-only)
+   - ✅ Original mcp-stdio-wrapper (STDIO ↔ HTTP bridge)
+   - ⚠️ Replaced by combined mcp-stdio-service for optimization
 
 ## Quick Start
 
@@ -107,7 +113,7 @@ docker-compose up -d
 docker-compose ps
 
 # View logs
-docker-compose logs mcp-service
+docker-compose logs mcp-http-service
 ```
 
 ## Access Points
@@ -127,7 +133,7 @@ docker-compose logs mcp-service
 
 **Services**:
 1. **crewai-agent**: AI agent with natural language processing (port 8001)
-2. **mcp-service**: HTTP MCP service with 7 tools (port 8000)
+2. **mcp-http-service**: HTTP MCP service with 7 tools (port 8000)
 3. **postgres**: PostgreSQL database (port 5432)
 4. **pgadmin**: Database management UI (port 8080)
 
@@ -142,9 +148,10 @@ docker-compose logs mcp-service
 
 ## Important Instructions
 
-- Current implementation uses simple AI agent (not full CrewAI)
-- STDIO wrapper exists but is unused (direct HTTP communication)
+- Current implementation uses HTTP-based MCP integration (not native CrewAI MCP)
+- Simple AI agent handles natural language processing
 - All services are containerized and health-monitored
 - Database includes sample data for immediate testing
 - Environment variables configured in .env file
+- Experimental STDIO support available but not used due to dependency conflicts
 

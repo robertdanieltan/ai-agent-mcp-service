@@ -23,18 +23,63 @@ services:
       timeout: 5s
       retries: 5
 
-  # MCP Service
-  mcp-service:
+  # Original MCP Service (commented out - replaced by combined mcp-stdio-service)
+  # mcp-service:
+  #   build:
+  #     context: .
+  #     dockerfile: mcp_service/Dockerfile
+  #   container_name: mcp_service
+  #   environment:
+  #     DB_HOST: postgres
+  #     DB_PORT: 5432
+  #     DB_NAME: ${DB_NAME:-task_management}
+  #     DB_USER: ${DB_USER:-postgres}
+  #     DB_PASSWORD: ${DB_PASSWORD:-postgres}
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - mcp_network
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   restart: unless-stopped
+
+  # Original MCP STDIO Wrapper (commented out - merged into mcp-stdio-service)
+  # mcp-stdio-wrapper:
+  #   build:
+  #     context: .
+  #     dockerfile: mcp_stdio_wrapper/Dockerfile
+  #   container_name: mcp_stdio_wrapper
+  #   environment:
+  #     MCP_SERVICE_URL: http://mcp-service:8000
+  #   depends_on:
+  #     mcp-service:
+  #       condition: service_healthy
+  #   networks:
+  #     - mcp_network
+  #   restart: unless-stopped
+  #   # This service runs as a utility container, not exposed directly
+
+  # Combined MCP HTTP Service (replaces both mcp-service and mcp-stdio-wrapper)
+  mcp-http-service:
     build:
       context: .
-      dockerfile: mcp_service/Dockerfile
-    container_name: mcp_service
+      dockerfile: mcp_http_service/Dockerfile
+    container_name: mcp_http_service
     environment:
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-task_management}
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-task_management}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      PORT: 8000
+      HOST: 0.0.0.0
     ports:
       - "8000:8000"
     depends_on:
@@ -48,24 +93,9 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
+    # This service provides HTTP interface with direct MCP tool execution
 
-  # MCP STDIO Wrapper for CrewAI integration
-  mcp-stdio-wrapper:
-    build:
-      context: .
-      dockerfile: mcp_stdio_wrapper/Dockerfile
-    container_name: mcp_stdio_wrapper
-    environment:
-      MCP_SERVICE_URL: http://mcp-service:8000
-    depends_on:
-      mcp-service:
-        condition: service_healthy
-    networks:
-      - mcp_network
-    restart: unless-stopped
-    # This service runs as a utility container, not exposed directly
-
-  # CrewAI Agent Service
+  # CrewAI Agent Service - Uses HTTP-based MCP integration
   crewai-agent:
     build:
       context: .
@@ -73,13 +103,16 @@ services:
     container_name: crewai_agent
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      MCP_SERVICE_URL: http://mcp-service:8000
+      # HTTP-based MCP service connection
+      MCP_SERVICE_URL: http://mcp-http-service:8000
       PORT: 8001
       HOST: 0.0.0.0
     ports:
       - "8001:8001"
     depends_on:
-      mcp-service:
+      postgres:
+        condition: service_healthy
+      mcp-http-service:
         condition: service_healthy
     networks:
       - mcp_network
